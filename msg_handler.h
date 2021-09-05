@@ -65,7 +65,7 @@ protected:
      * @param msg 
      */
     virtual void OnMsgProcessed(Msg& msg, int);
-    virtual void Test(Msg& msg, int);
+    virtual void OnInit(Msg& msg, int);
 
 protected:
     /**
@@ -73,7 +73,7 @@ protected:
      * 
      * @param threadCnt 线程数,实际内部会控制在[2,MaxThread]之间
      */
-    static void Init(int threadCnt);
+    static void Init(int threadCnt,MsgHandler& handler);
     /**
      * @brief 销毁消息处理线程
      * 

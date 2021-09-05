@@ -7,9 +7,11 @@ volatile std::atomic_uint64_t Msg::m_msgDoCnt(0);
 
 MsgHandler::MsgHandler(int threadCnt)
 {
-    Init(threadCnt);
     // 添加绑定信息
-    m_msgPipe.emplace(0, std::bind(&MsgHandler::Test, this, std::placeholders::_1, std::placeholders::_2));
+    m_msgPipe.emplace(0, std::bind(&MsgHandler::OnInit, this, std::placeholders::_1, std::placeholders::_2));
+    if (!m_isInited) {
+        Init(threadCnt, *this);
+    }
 }
 MsgHandler::~MsgHandler()
 {
@@ -57,30 +59,34 @@ void MsgHandler::AsyncProcessMsg(Msg& msg)
     //没有时调默认回调函数
     return OnMsgProcessed(msg, ret);
 }
-void MsgHandler::OnMsgProcessed(Msg& msg, int)
+void MsgHandler::OnMsgProcessed(Msg& msg, int ret)
 {
     using std::cout;
     using std::endl;
-    cout << "default" << endl;
+    cout << msg.GetID() << "[" << __FUNCTION__ << "]"
+         << "ret=" << ret << endl;
 }
-void MsgHandler::Test(Msg& msg, int)
+void MsgHandler::OnInit(Msg& msg, int ret)
 {
     using std::cout;
     using std::endl;
-    cout << "Test" << endl;
+    cout << __FUNCTION__ << endl;
 }
-void MsgHandler::Init(int threadCnt)
+void MsgHandler::Init(int threadCnt, MsgHandler& handler)
 {
     std::lock_guard<std::mutex> lk(m_safeMutex);
-    if (!m_isInited) {
-        m_isInited = true;
-        m_status = 1;
-        static_assert(m_MaxThreadCount > 2, "m_MaxThreadCount must grater than 2");
-        for (int i = 0; (i < threadCnt && i < m_MaxThreadCount) || i < 2; i++) {
-            m_msgThread[i] = std::move(std::thread(DispatchMsg, i));
-            ++m_curThreadCount;
-        }
+    if (m_isInited) {
+        return;
     }
+    m_isInited = true;
+    m_status = 1;
+    static_assert(m_MaxThreadCount > 2, "m_MaxThreadCount must grater than 2");
+    for (int i = 0; (i < threadCnt && i < m_MaxThreadCount) || i < 2; i++) {
+        m_msgThread[i] = std::move(std::thread(DispatchMsg, i));
+        ++m_curThreadCount;
+    }
+    using InitMsg = Msg;
+    (void)handler.ProcessMsg(std::make_unique<InitMsg>(0));
 }
 void MsgHandler::Destroy()
 {
@@ -118,14 +124,14 @@ void MsgHandler::DispatchMsg(int threadIndex)
             try {
                 msg_handler->AsyncProcessMsg(*msg);
             } catch (const std::exception& e) {
-                // std::cerr << e.what() << '\n';
+                // std::cerr << e.what() << std::endl;
             } catch (...) {
             }
             m_msgQueue[threadIndex].pop();
         }
     }
 
-    // cout << threadIndex << endl;
+    // std::cout << threadIndex << std::endl;
 }
 std::mutex MsgHandler::m_safeMutex;
 
